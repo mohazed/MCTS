@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mini-AlphaZero — Puissance 4</title>
+<style>
+:root{
+  --bg:#0e1014; --panel:#161a21; --panel-2:#1b2029; --line:#242b37;
+  --text:#e7eaf0; --muted:#8b93a3; --faint:#5c6474;
+  --accent:#4d8cf5; --accent-2:#3a72d8;
+  --yellow:#f5c344; --red:#e8564d;
+  --prior:#39414f; --visit:#4d8cf5;
+  --cell:52px; --gap:6px;
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);padding:28px 24px 40px;
+     font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+     -webkit-font-smoothing:antialiased}
+h1{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:0 0 3px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:22px;transition:opacity .2s}
+.wrap{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+
+/* ---------- board ---------- */
+.board{display:grid;grid-template-columns:repeat(7,var(--cell));gap:var(--gap);
+       padding:10px;border-radius:12px;
+       background:linear-gradient(158deg,#2854cc,#1a3796);
+       box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 10px 26px -12px rgba(0,0,0,.85)}
+.cell{width:var(--cell);height:var(--cell);border-radius:50%;position:relative;
+      background:#0b0d11;box-shadow:inset 0 3px 7px rgba(0,0,0,.75);
+      overflow:hidden}
+.board.playable .cell{cursor:pointer}
+.disc{position:absolute;inset:3px;border-radius:50%;opacity:0;transform:scale(.7);
+      transition:opacity .18s var(--ease),transform .18s var(--ease)}
+.cell.y .disc,.cell.r .disc{opacity:1;transform:scale(1)}
+.cell.y .disc{background:radial-gradient(circle at 34% 28%,#ffe08a,var(--yellow) 58%,#c9971c);
+              box-shadow:inset 0 -2px 5px rgba(0,0,0,.32)}
+.cell.r .disc{background:radial-gradient(circle at 34% 28%,#ff9089,var(--red) 58%,#a92f28);
+              box-shadow:inset 0 -2px 5px rgba(0,0,0,.32)}
+@keyframes drop{
+  0%{transform:translateY(var(--drop)) scale(1)}
+  72%{transform:translateY(0) scale(1)}
+  84%{transform:translateY(0) scale(1.04,.94)}
+  100%{transform:translateY(0) scale(1)}
+}
+.cell.dropping .disc{animation:drop .42s cubic-bezier(.38,.02,.5,1)}
+/* ghost preview of the move under the cursor */
+.cell.ghost .disc{opacity:.38;transform:scale(1);
+      box-shadow:inset 0 0 0 2px rgba(255,255,255,.35)}
+.cell.ghost.y-turn .disc{background:var(--yellow)}
+.cell.ghost.r-turn .disc{background:var(--red)}
+/* the four winning cells */
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.9) inset}
+                 50%{box-shadow:0 0 0 4px rgba(255,255,255,.9) inset}}
+.cell.win{animation:pulse 1.25s ease-in-out infinite}
+.cell.lastmove .disc::after{content:'';position:absolute;inset:38%;border-radius:50%;
+      background:rgba(255,255,255,.55)}
+.board.dim .cell:not(.win) .disc{opacity:.45;transition:opacity .5s var(--ease)}
+
+/* ---------- analysis bars ---------- */
+.bars{display:grid;grid-template-columns:repeat(7,var(--cell));gap:var(--gap);
+      padding:0 10px;margin-top:10px}
+.bar{height:66px;position:relative;background:#0d1015;border-radius:6px;
+     border:1px solid var(--line);overflow:hidden;transition:border-color .15s}
+.board-wrap.playable .bar{cursor:pointer}
+.bar .prior,.bar .visits{position:absolute;bottom:0;height:0;
+     transition:height .38s var(--ease)}
+.bar .prior{width:100%;background:var(--prior)}
+.bar .visits{width:58%;left:21%;background:var(--visit);border-radius:3px 3px 0 0}
+.bar .lab{position:absolute;top:3px;width:100%;text-align:center;font-size:10px;
+     color:#dfe5ef;font-weight:600;font-variant-numeric:tabular-nums;z-index:2;
+     text-shadow:0 1px 3px rgba(0,0,0,.85);transition:opacity .2s}
+.cols{display:grid;grid-template-columns:repeat(7,var(--cell));gap:var(--gap);
+      padding:0 10px;text-align:center;color:var(--faint);font-size:11px;margin-top:4px}
+.cols span{transition:color .15s}
+.cols span.hot{color:var(--accent)}
+
+/* ---------- status ---------- */
+.status{margin-top:16px;font-size:14px;min-height:24px;display:flex;align-items:center;
+        gap:8px;font-weight:500}
+.stat{color:var(--faint);font-size:11px;margin-top:7px;min-height:16px;
+      font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:6px;
+      flex-wrap:wrap}
+.stat b{color:var(--muted);font-weight:500}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);
+         border-radius:50%;animation:spin .7s linear infinite;flex:none}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none}
+.dot.y{background:var(--yellow)}.dot.r{background:var(--red)}
+
+/* ---------- controls ---------- */
+.controls{width:288px}
+.grp{margin-bottom:16px}
+.grp:last-of-type{margin-bottom:0}
+label,.lbl{display:flex;justify-content:space-between;align-items:center;gap:8px;
+      margin:0 0 6px;color:var(--muted);font-size:12px;font-weight:500}
+.lbl .v{color:var(--text);font-variant-numeric:tabular-nums}
+select{width:100%;background:var(--panel-2);color:var(--text);border:1px solid var(--line);
+       border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;
+       cursor:pointer;transition:border-color .15s}
+select:hover:not(:disabled){border-color:#33405a}
+select:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);
+       outline-offset:2px}
+select:disabled{opacity:.4;cursor:default}
+input[type=range]{width:100%;-webkit-appearance:none;appearance:none;height:4px;
+       border-radius:2px;background:var(--line);margin:9px 0 0;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;
+       border-radius:50%;background:var(--accent);border:2px solid var(--panel);
+       box-shadow:0 1px 4px rgba(0,0,0,.5);transition:transform .12s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15)}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+button{flex:1 1 auto;background:var(--accent);color:#fff;border:0;padding:9px 12px;
+       border-radius:8px;cursor:pointer;font-size:13px;font-weight:550;font-family:inherit;
+       transition:background .15s,transform .08s}
+button:hover:not(:disabled){background:#5c98f7}
+button:active:not(:disabled){transform:translateY(1px)}
+button.ghost{background:var(--panel-2);border:1px solid var(--line);color:var(--text)}
+button.ghost:hover:not(:disabled){background:#232a36}
+button:disabled{opacity:.38;cursor:default}
+.gauge{height:8px;background:#0d1015;border:1px solid var(--line);border-radius:5px;
+       position:relative;overflow:hidden}
+.gauge .mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--faint);
+       z-index:1}
+.gauge .fill{position:absolute;top:0;bottom:0;width:0;left:50%;background:var(--accent);
+       transition:width .4s var(--ease),left .4s var(--ease),background .3s}
+.gaugev{display:flex;justify-content:space-between;color:var(--faint);font-size:11px;
+       margin-top:5px;font-variant-numeric:tabular-nums}
+.legend{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);
+       font-size:12px;color:var(--muted)}
+.legend .key{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.legend .hint{color:var(--faint);margin:9px 0 0;font-size:11.5px;line-height:1.5}
+.sw{width:11px;height:11px;border-radius:3px;flex:none}
+.note{margin:11px 0 0;font-size:11px;line-height:1.55;color:var(--faint)}
+.note code{background:var(--panel-2);padding:1px 4px;border-radius:3px;font-size:10.5px}
+.kbd{font-size:10.5px;color:var(--faint);margin:11px 0 0;line-height:2}
+.kbd b{background:var(--panel-2);border:1px solid var(--line);border-radius:4px;
+       padding:1px 5px;color:var(--muted);font-weight:500;font-family:inherit}
+.warn{color:#e5a84f}
+.hide{display:none !important}
+
+/* ---------- authors ---------- */
+.authors{display:flex;align-items:center;gap:18px;max-width:660px;margin:22px 0 0;
+     padding:14px 16px;background:var(--panel);border:1px solid var(--line);
+     border-radius:14px}
+.authors img{width:172px;height:135px;object-fit:cover;border-radius:10px;flex:none;
+     border:1px solid var(--line)}
+.authors .who{min-width:0}
+.authors .ttl{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+     color:var(--faint);font-weight:600;margin-bottom:6px}
+.authors .nm{font-size:13.5px;font-weight:550;line-height:1.5}
+.authors .aff{margin-top:7px;font-size:11px;color:var(--faint);line-height:1.5}
+@media(max-width:760px){:root{--cell:40px}.controls{width:100%}}
+</style>
+</head>
+<body>
+<h1>Mini-AlphaZero — Puissance 4</h1>
+<div class="sub" id="sub">Vous jouez les jaunes et commencez. Cliquez une colonne.</div>
+
+<div class="wrap">
+  <div class="panel board-wrap" id="boardWrap">
+    <div class="board" id="board"></div>
+    <div class="bars" id="bars"></div>
+    <div class="cols" id="cols"></div>
+    <div class="status" id="status"></div>
+    <div class="stat" id="stat"></div>
+  </div>
+
+  <div class="panel controls">
+    <div class="grp">
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="human">Humain (jaune) contre IA (rouge)</option>
+        <option value="ai">IA contre IA</option>
+      </select>
+    </div>
+
+    <div class="grp">
+      <div class="lbl"><span><span class="dot y" style="margin-right:6px"></span>Jaune</span>
+        <span class="v" id="labY">vous</span></div>
+      <select id="agentY" disabled></select>
+      <input type="range" id="simsY" min="25" max="800" step="25" value="100" class="hide">
+    </div>
+
+    <div class="grp">
+      <div class="lbl"><span><span class="dot r" style="margin-right:6px"></span>Rouge</span>
+        <span class="v"><b id="simsRv">100</b> sim.</span></div>
+      <select id="agentR"></select>
+      <input type="range" id="simsR" min="25" max="800" step="25" value="100">
+    </div>
+
+    <div class="grp" id="aictl">
+      <div class="lbl"><span>Délai entre les coups</span>
+        <span class="v"><b id="speedv">600</b> ms</span></div>
+      <input type="range" id="speed" min="0" max="2000" step="100" value="600">
+    </div>
+
+    <div class="grp">
+      <div class="lbl"><span>Valeur de la position</span><span class="v" id="gaugev">—</span></div>
+      <div class="gauge"><div class="mid"></div><div class="fill" id="gauge"></div></div>
+      <div class="gaugev"><span>−1 perdu</span><span>gagné +1</span></div>
+    </div>
+
+    <div class="btns">
+      <button id="new" class="ghost">Nouvelle partie</button>
+      <button id="run" class="hide">▶ Lancer</button>
+      <button id="step" class="ghost hide">⏭ Un coup</button>
+    </div>
+
+    <div class="legend">
+      <div class="key"><span class="sw" style="background:var(--prior)"></span>prior du
+        réseau <i>P(a|s)</i></div>
+      <div class="key"><span class="sw" style="background:var(--visit)"></span>visites de
+        la recherche <i>N(s,a)</i></div>
+      <p class="hint">La barre bleue devant la grise montre la recherche qui corrige le
+        réseau.</p>
+      <p class="kbd"><b>0</b>–<b>6</b> jouer · <b>espace</b> lancer/pause ·
+        <b>N</b> nouvelle partie</p>
+      <p class="note">Une partie ne mesure rien : les agents sont souvent déterministes
+        et le premier joueur est avantagé. Pour un chiffre, utiliser
+        <code>python main.py eval</code>, qui joue des ouvertures équilibrées et donne un
+        intervalle de Wilson.</p>
+    </div>
+  </div>
+</div>
+
+<footer class="authors">
+  <img src="/static/auteurs.jpg" alt="Les trois auteurs du projet">
+  <div class="who">
+    <div class="ttl">Auteurs</div>
+    <div class="nm">Mohamed El Amine ROUIBI</div>
+    <div class="nm">Thomas SINAPI</div>
+    <div class="nm">Mohamed ZOUAD</div>
+    <div class="aff">M2 IASD Apprentissage — Université Paris-Dauphine PSL<br>
+      Projet du cours <i>Monte Carlo Search</i> — Tristan Cazenave</div>
+  </div>
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const R = 6, C = 7;
+let gid=null, cur=null, lastInfo=null, busy=false, running=false, painted=null;
+const mode = () => $('mode').value;
+
+/* ---------- build the DOM once, then only update it ---------- */
+const cells=[], bars=[], labs=[], priors=[], visits=[], colLabels=[];
+for(let r=0;r<R;r++) for(let c=0;c<C;c++){
+  const cell=document.createElement('div');
+  cell.className='cell';
+  cell.appendChild(Object.assign(document.createElement('div'),{className:'disc'}));
+  cell.onmouseenter=()=>ghost(c);
+  cell.onclick=()=>human(c);
+  $('board').appendChild(cell); cells.push(cell);
+}
+$('board').onmouseleave=()=>ghost(null);
+for(let c=0;c<C;c++){
+  const b=document.createElement('div'); b.className='bar';
+  const p=Object.assign(document.createElement('div'),{className:'prior'});
+  const v=Object.assign(document.createElement('div'),{className:'visits'});
+  const l=Object.assign(document.createElement('div'),{className:'lab'});
+  b.append(p,v,l); b.onclick=()=>human(c); b.onmouseenter=()=>ghost(c);
+  $('bars').appendChild(b); bars.push(b); priors.push(p); visits.push(v); labs.push(l);
+  const t=document.createElement('span'); t.textContent=c;
+  $('cols').appendChild(t); colLabels.push(t);
+}
+
+const canPlay = () => mode()==='human' && cur && !cur.terminal && cur.turn===1 && !busy;
+/* pitch of one row, read from CSS so it follows the responsive --cell/--gap */
+const rowPitch = () => {
+  const cs = getComputedStyle(document.documentElement);
+  return parseFloat(cs.getPropertyValue('--cell')) + parseFloat(cs.getPropertyValue('--gap'));
+};
+
+function ghost(col){
+  cells.forEach(x=>x.classList.remove('ghost','y-turn','r-turn'));
+  colLabels.forEach(x=>x.classList.remove('hot'));
+  if(col===null || !canPlay() || !cur.legal.includes(col)) return;
+  colLabels[col].classList.add('hot');
+  for(let r=R-1;r>=0;r--){                       // lowest empty cell of the column
+    if(cur.grid[r][col]===0){
+      cells[r*C+col].classList.add('ghost', cur.turn===1?'y-turn':'r-turn');
+      return;
+    }
+  }
+}
+
+function paint(s){
+  cur=s;
+  // clear the previous drop marker here rather than on 'animationend': that event
+  // does not fire when animations are throttled (background tab, reduced motion)
+  cells.forEach(c=>c.classList.remove('dropping'));
+  const lastKey = s.last ? (R-1-s.last[0])+','+s.last[1] : null;
+  for(let r=0;r<R;r++) for(let c=0;c<C;c++){
+    const cell=cells[r*C+c], v=s.grid[r][c], key=r+','+c;
+    const cls = v===1?'y':v===2?'r':'';
+    if(cell.dataset.v!==cls){
+      cell.classList.remove('y','r');
+      if(cls) cell.classList.add(cls);
+      cell.dataset.v=cls;
+      if(cls && key===lastKey && painted!==lastKey){   // animate only the new disc
+        cell.style.setProperty('--drop', `-${(r+1)*rowPitch()}px`);
+        void cell.offsetWidth;                          // restart the animation
+        cell.classList.add('dropping');
+      }
+    }
+    cell.classList.toggle('lastmove', key===lastKey && !s.win_line);
+    cell.classList.remove('win');
+  }
+  painted = lastKey;
+  if(s.win_line) s.win_line.forEach(([r,c])=>cells[r*C+c].classList.add('win'));
+  $('board').classList.toggle('dim', !!s.win_line);
+  $('board').classList.toggle('playable', canPlay());
+  $('boardWrap').classList.toggle('playable', canPlay());
+
+  /* bars: priors and visits are both distributions, drawn on one shared scale */
+  const v = lastInfo && lastInfo.visits, p = lastInfo && lastInfo.priors;
+  const sum = v ? v.reduce((a,b)=>a+b,0) : 0;
+  const vf = v && sum>0 ? v.map(x=>x/sum) : null;
+  const scale = Math.max(vf?Math.max(...vf):0, p?Math.max(...p):0, 1e-9);
+  for(let c=0;c<C;c++){
+    priors[c].style.height = p ? (94*p[c]/scale)+'%' : '0%';
+    visits[c].style.height = vf ? (94*vf[c]/scale)+'%' : '0%';
+    labs[c].textContent = v && v[c]>0 ? Math.round(v[c]) : '';
+    bars[c].title = (p?`prior ${p[c].toFixed(3)}`:'') + (p&&v?' · ':'') +
+                    (v?`visites ${Math.round(v[c])}`:'');
+  }
+  status(s);
+}
+
+function status(s){
+  const st=$('status'); st.innerHTML='';
+  const add=(html)=>st.insertAdjacentHTML('beforeend',html);
+  if(s.terminal){
+    if(!s.winner) add('Match nul — les 42 cases sont remplies.');
+    else{
+      const y=s.winner===1, human_=mode()==='human';
+      add(`<span class="dot ${y?'y':'r'}"></span>` +
+          (human_ ? (y?'Vous gagnez !':'L\'IA gagne.') : (y?'Le jaune gagne.':'Le rouge gagne.')));
+    }
+  } else if(busy){
+    add('<span class="spinner"></span>' +
+        (mode()==='human' ? 'L\'IA réfléchit…' : (s.turn===1?'Le jaune réfléchit…':'Le rouge réfléchit…')));
+  } else if(mode()==='human'){
+    add('<span class="dot y"></span>À vous.');
+  } else {
+    add(`<span class="dot ${s.turn===1?'y':'r'}"></span>` +
+        (s.turn===1?'Au jaune':'Au rouge') + (running?' — en cours…':' — en pause.'));
+  }
+  const t=$('stat');
+  if(lastInfo){
+    t.innerHTML = `<span class="dot ${lastInfo.mover===1?'y':'r'}"></span>` +
+      `<b>${lastInfo.agent}</b> → colonne ${lastInfo.col}` +
+      ` · ${lastInfo.time_ms.toFixed(0)} ms` +
+      (lastInfo.tt_hit_rate!=null
+        ? ` · table de transposition ${(100*lastInfo.tt_hit_rate).toFixed(0)} % de hits` : '') +
+      ` · coup ${s.moves}`;
+    const val=lastInfo.value, g=$('gauge');
+    if(val!=null){
+      const w=Math.abs(val)*50;
+      g.style.left = val>=0?'50%':(50-w)+'%'; g.style.width=w+'%';
+      g.style.background = val>=0?'var(--accent)':'var(--red)';
+      $('gaugev').textContent = (val>=0?'+':'')+val.toFixed(3);
+    } else { g.style.width='0%'; $('gaugev').textContent='—'; }
+  } else { t.innerHTML=''; }
+}
+
+async function post(url, body){
+  const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+                            body:JSON.stringify(body||{})});
+  if(!r.ok) throw new Error((await r.json()).detail || r.statusText);
+  return r.json();
+}
+const fail = m => $('status').innerHTML='<span class="warn">'+m+'</span>';
+
+async function aiMove(){
+  const yellow = cur.turn===1, mover = cur.turn;
+  const sel = yellow ? $('agentY') : $('agentR');
+  const sims = +(yellow ? $('simsY') : $('simsR')).value;
+  const s = await post('/api/ai',{game_id:gid, agent:sel.value, sims});
+  lastInfo = s.visits ? Object.assign(s,{mover}) : null;
+  paint(s);
+  return s;
+}
+
+async function human(col){
+  if(!canPlay() || !cur.legal.includes(col)) return;
+  busy=true; ghost(null);
+  try{
+    lastInfo=null;
+    paint(await post('/api/move',{game_id:gid,col}));
+    if(!cur.terminal){ status(cur); await aiMove(); }
+  }catch(e){ fail(e.message); }
+  busy=false; sync(); paint(cur);
+}
+
+async function autoRun(){
+  if(running||busy) return;
+  running=true; sync();
+  try{
+    while(running && cur && !cur.terminal){
+      busy=true; status(cur);
+      await aiMove();
+      busy=false;
+      const d=+$('speed').value;
+      if(d) await new Promise(r=>setTimeout(r,d));
+    }
+  }catch(e){ fail(e.message); }
+  busy=false; running=false; sync(); paint(cur);
+}
+
+async function oneStep(){
+  if(running||busy||!cur||cur.terminal) return;
+  busy=true; sync(); status(cur);
+  try{ await aiMove(); }catch(e){ fail(e.message); }
+  busy=false; sync(); paint(cur);
+}
+
+function sync(){
+  const ai = mode()==='ai';
+  $('simsRv').textContent = $('simsR').value;
+  $('speedv').textContent = $('speed').value;
+  $('agentY').disabled = !ai;
+  $('labY').innerHTML = ai ? '<b>'+$('simsY').value+'</b> sim.' : 'vous';
+  $('simsY').classList.toggle('hide', !ai);
+  $('aictl').classList.toggle('hide', !ai);
+  $('run').classList.toggle('hide', !ai);
+  $('step').classList.toggle('hide', !ai);
+  $('run').textContent = running ? '⏸ Pause' : '▶ Lancer';
+  $('run').disabled = busy && !running || !!(cur && cur.terminal);
+  $('step').disabled = running || busy || !!(cur && cur.terminal);
+  $('sub').textContent = ai
+    ? 'Deux agents s\'affrontent. Les barres montrent la recherche de celui qui vient de jouer.'
+    : 'Vous jouez les jaunes et commencez. Cliquez une colonne.';
+}
+
+async function newGame(){
+  running=false; lastInfo=null; painted=null;
+  const s = await post('/api/new'); gid=s.game_id;
+  $('gauge').style.width='0%'; $('gaugev').textContent='—';
+  cells.forEach(c=>{c.dataset.v=''; c.className='cell';});
+  paint(s); sync();
+}
+
+$('simsR').oninput = sync;
+$('simsY').oninput = sync;
+$('speed').oninput = sync;
+$('mode').onchange = newGame;
+$('new').onclick = newGame;
+$('run').onclick = () => { if(running){ running=false; sync(); } else autoRun(); };
+$('step').onclick = oneStep;
+addEventListener('keydown', e=>{
+  if(e.target.tagName==='SELECT'||e.target.tagName==='INPUT') return;
+  if(e.key>='0'&&e.key<='6') human(+e.key);
+  else if(e.key===' '&&mode()==='ai'){ e.preventDefault(); $('run').click(); }
+  else if(e.key.toLowerCase()==='n') newGame();
+});
+
+(async function(){
+  const a = await (await fetch('/api/agents')).json();
+  for(const sel of [$('agentY'), $('agentR')])
+    a.agents.forEach(x=>{
+      const o=document.createElement('option'); o.value=x.id; o.textContent=x.label;
+      if(!x.available){o.disabled=true;o.textContent+=' (pas de checkpoint)';}
+      sel.appendChild(o);
+    });
+  const def = a.checkpoint_found ? 'puct' : 'uct';
+  $('agentY').value=def; $('agentR').value=def;
+  await newGame();
+  if(!a.checkpoint_found)
+    fail('Aucun checkpoint '+a.checkpoint+' : lancez d\'abord le pipeline.');
+})();
+</script>
+</body>
+</html>

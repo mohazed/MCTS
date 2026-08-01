@@ -1,0 +1,11 @@
+# THE RUN OF THE REPORT. ~10-15 min on 6 workers.
+net:      {channels: 64, blocks: 3}
+selfplay: {iterations: 12, games_per_iter: 40, sims: 100,
+           temperature_moves: 8, dirichlet_alpha: 1.0, dirichlet_eps: 0.25,
+           workers: 6, augment_symmetry: true}
+train:    {buffer_iters: 8, buffer_max: 60000, batch_size: 128,
+           steps_per_iter: 300, lr: 1.0e-3, lr_drop_iter: 8, lr_after: 3.0e-4,
+           weight_decay: 1.0e-4}
+search:   {c_puct: 1.0, uct_c: 0.4, grave_ref: 50, rave_bias: 1.0e-5}
+eval:     {every: 3, games: 28, final_games: 56, sims: 100, use_testset: true}
+seed: 20260731

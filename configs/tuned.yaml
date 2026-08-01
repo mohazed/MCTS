@@ -1,0 +1,18 @@
+# RUN 2 OF THE REPORT.  Identical to default.yaml except for the data/steps
+# ratio, which the run-1 diagnosis identified as the cause of the failure of
+# criteria C2 and C3: 300 steps x batch 128 on ~1900 fresh samples is about 20
+# epochs per iteration, and both heads overfit (the value head saturates at
+# +-1, which destroys PUCT's tactics -- see report §8).
+#   games_per_iter  40 -> 96   (2.4x more data)
+#   steps_per_iter 300 -> 200  (~6 epochs of fresh data instead of ~20)
+#   iterations      12 -> 14
+net:      {channels: 64, blocks: 3}
+selfplay: {iterations: 14, games_per_iter: 96, sims: 100,
+           temperature_moves: 8, dirichlet_alpha: 1.0, dirichlet_eps: 0.25,
+           workers: 6, augment_symmetry: true}
+train:    {buffer_iters: 8, buffer_max: 60000, batch_size: 128,
+           steps_per_iter: 200, lr: 1.0e-3, lr_drop_iter: 10, lr_after: 3.0e-4,
+           weight_decay: 1.0e-4}
+search:   {c_puct: 1.0, uct_c: 0.4, grave_ref: 50, rave_bias: 1.0e-5}
+eval:     {every: 2, games: 28, final_games: 56, sims: 100, use_testset: true}
+seed: 20260731

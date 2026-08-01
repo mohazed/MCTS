@@ -1,0 +1,13 @@
+# Smoke config: validates the whole pipeline end to end in well under a minute.
+# ALWAYS run this before launching a real run.
+net:      {channels: 16, blocks: 1}
+selfplay: {iterations: 2, games_per_iter: 4, sims: 25,
+           temperature_moves: 8, dirichlet_alpha: 1.0, dirichlet_eps: 0.25,
+           workers: 2, augment_symmetry: true}
+train:    {buffer_iters: 8, buffer_max: 60000, batch_size: 32,
+           steps_per_iter: 20, lr: 1.0e-3, lr_drop_iter: 8, lr_after: 3.0e-4,
+           weight_decay: 1.0e-4}
+search:   {c_puct: 1.0, uct_c: 0.4, grave_ref: 50, rave_bias: 1.0e-5}
+eval:     {every: 2, games: 14, final_games: 14, sims: 25, use_testset: false}
+ckpt_dir: ckpt/smoke
+seed: 20260731

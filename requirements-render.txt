@@ -1,0 +1,10 @@
+# Minimal dependencies to run the FastAPI demo (server/api.py) on Render's
+# free tier. CPU-only torch wheels avoid pulling in ~1GB+ of unused CUDA
+# libraries, which keeps the build fast and well within the free plan's
+# build-minute and disk limits.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch>=2.2
+numpy>=1.26
+fastapi>=0.110
+uvicorn>=0.29

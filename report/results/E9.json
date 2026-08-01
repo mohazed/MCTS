@@ -1,0 +1,53 @@
+{
+ "rows": [
+  {
+   "name": "Flat MC 200",
+   "ms_per_move": 4.63444736967117,
+   "tt_hit_rate": 0.0,
+   "games": 56
+  },
+  {
+   "name": "UCB racine 200",
+   "ms_per_move": 6.321273596117725,
+   "tt_hit_rate": 0.0,
+   "games": 56
+  },
+  {
+   "name": "UCT 200",
+   "ms_per_move": 8.095383392116409,
+   "tt_hit_rate": 0.7749878440973496,
+   "games": 56
+  },
+  {
+   "name": "RAVE 200",
+   "ms_per_move": 27.162735781542235,
+   "tt_hit_rate": 0.8239270844061263,
+   "games": 56
+  },
+  {
+   "name": "GRAVE 200",
+   "ms_per_move": 27.248978845723048,
+   "tt_hit_rate": 0.8257502566842083,
+   "games": 56
+  },
+  {
+   "name": "Alpha-b\u00eata d.4",
+   "ms_per_move": 16.779987649169925,
+   "tt_hit_rate": 0.13240322801258378,
+   "games": 56
+  },
+  {
+   "name": "PUCT 100",
+   "ms_per_move": 121.47275250921766,
+   "tt_hit_rate": 0.7837466600151709,
+   "games": 56
+  },
+  {
+   "name": "R\u00e9seau seul",
+   "ms_per_move": 1.078265898747283,
+   "tt_hit_rate": 0.0,
+   "games": 56
+  }
+ ],
+ "note": "mesur\u00e9 sur des parties \u00e0 ouvertures \u00e9quilibr\u00e9es contre l'agent al\u00e9atoire"
+}
